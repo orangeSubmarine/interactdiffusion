@@ -23,7 +23,7 @@ clip_text_feature_dict = dict()
 
 
 def load_clip_text_cache(device):
-    clip_text_feature_dict = torch.load('../clip_phrases_feature_cache.pth', map_location=device)
+    clip_text_feature_dict = torch.load('/home/lxc/papers/Interactdiffusion/interactdiffusion/DATA/clip_phrases_feature_cache.pth', map_location=device)
     return clip_text_feature_dict
 
 
@@ -88,6 +88,7 @@ def load_ckpt(ckpt_path):
     # donot need to load official_ckpt for self.model here, since we will load from our ckpt
     model.load_state_dict(saved_ckpt['model'])
     autoencoder.load_state_dict(saved_ckpt["autoencoder"])
+    del saved_ckpt["text_encoder"]['transformer.text_model.embeddings.position_ids'] #add this line to solve Unexpected key(s) in state_dict: "transformer.text_model.embeddings.position_ids".
     text_encoder.load_state_dict(saved_ckpt["text_encoder"])
     diffusion.load_state_dict(saved_ckpt["diffusion"])
 

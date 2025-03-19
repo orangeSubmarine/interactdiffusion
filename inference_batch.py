@@ -146,7 +146,7 @@ if __name__ == "__main__":
     meta_list_new = []
     for r in res:  # [:2]
         meta_list_new.append(dict(
-            ckpt="ckpt.pth",
+            ckpt="/home/lxc/models/interactdiff/interact-diffusion-v1-1.pth",
             prompt=r["prompt"],
             subject_phrases=r["subject_phrases"],
             object_phrases=r["object_phrases"],

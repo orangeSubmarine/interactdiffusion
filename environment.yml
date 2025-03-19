@@ -1,4 +1,4 @@
-name: id
+name: interact
 channels:
   - pytorch
   - nvidia
