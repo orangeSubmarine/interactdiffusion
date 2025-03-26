@@ -175,8 +175,8 @@ class Trainer:
         self.autoencoder = instantiate_from_config(config.autoencoder).to(self.device)
         self.text_encoder = instantiate_from_config(config.text_encoder).to(self.device)
         self.diffusion = instantiate_from_config(config.diffusion).to(self.device)
+        state_dict = read_official_ckpt(os.path.join(config.MODEL_ROOT, config.official_ckpt_name))
 
-        state_dict = read_official_ckpt(os.path.join(config.DATA_ROOT, config.official_ckpt_name))
 
         # modify the input conv for SD if necessary (grounding as unet input; inpaint)
         additional_channels = self.model.additional_channel_from_downsampler
@@ -191,7 +191,7 @@ class Trainer:
         original_params_names = list(state_dict["model"].keys())  # used for sanity check later
 
         self.autoencoder.load_state_dict(state_dict["autoencoder"])
-        self.text_encoder.load_state_dict(state_dict["text_encoder"])
+        self.text_encoder.load_state_dict(state_dict["text_encoder"],strict=False)#add "strict=False" to solve Unexpected key(s) in state_dict: "transformer.text_model.embeddings.position_ids".
         self.diffusion.load_state_dict(state_dict["diffusion"])
 
         self.autoencoder.eval()
