@@ -257,16 +257,19 @@ class GatedCrossAttentionDense(nn.Module):
 
         self.attn = CrossAttention(query_dim=query_dim, key_dim=key_dim, value_dim=value_dim, heads=n_heads,
                                    dim_head=d_head)
+        # 带GLU门控的前馈神经网络
         self.ff = FeedForward(query_dim, glu=True)
 
         self.norm1 = nn.LayerNorm(query_dim)
         self.norm2 = nn.LayerNorm(query_dim)
-
+        
+        # 可学习的门控系数γ（初始值为0，通过tanh激活限制范围）
         self.register_parameter('alpha_attn', nn.Parameter(torch.tensor(0.)))
         self.register_parameter('alpha_dense', nn.Parameter(torch.tensor(0.)))
 
         # this can be useful: we can externally change magnitude of tanh(alpha)
         # for example, when it is set to 0, then the entire model is same as original one 
+        # 外部控制门控信号强度的缩放因子η
         self.scale = 1
 
     def forward(self, x, objs):
@@ -275,7 +278,7 @@ class GatedCrossAttentionDense(nn.Module):
 
         return x
 
-
+#基础自注意力门控：拼接视觉特征与条件特征后进行自注意力
 class GatedSelfAttentionDense(nn.Module):
     def __init__(self, query_dim, context_dim, n_heads, d_head):
         super().__init__()
@@ -297,16 +300,18 @@ class GatedSelfAttentionDense(nn.Module):
         self.scale = 1
 
     def forward(self, x, objs):
+        #输出时截取前N_visual个位置的特征，保留原始维度
         N_visual = x.shape[1]
         objs = self.linear(objs)
 
-        x = x + self.scale * torch.tanh(self.alpha_attn) * self.attn(self.norm1(torch.cat([x, objs], dim=1)))[:,
+        #合并视觉特征与条件特征
+        x = x + self.scale * torch.tanh(self.alpha_attn) * self.attn(sself.norm1(torch.cat([x, obj], dim=1)))[:,
                                                            0:N_visual, :]
         x = x + self.scale * torch.tanh(self.alpha_dense) * self.ff(self.norm2(x))
 
         return x
 
-
+#空间自适应门控：拼接后提取条件特征并做空间插值
 class GatedSelfAttentionDense2(nn.Module):
     def __init__(self, query_dim, context_dim, n_heads, d_head):
         super().__init__()
@@ -333,7 +338,7 @@ class GatedSelfAttentionDense2(nn.Module):
 
         objs = self.linear(objs)
 
-        # sanity check 
+        # sanity check 新增空间维度校验
         size_v = math.sqrt(N_visual)
         size_g = math.sqrt(N_ground)
         assert int(size_v) == size_v, "Visual tokens must be square rootable"
@@ -341,10 +346,10 @@ class GatedSelfAttentionDense2(nn.Module):
         size_v = int(size_v)
         size_g = int(size_g)
 
-        # select grounding token and resize it to visual token size as residual 
+        # select grounding token and resize it to visual token size as residual 、
         out = self.attn(self.norm1(torch.cat([x, objs], dim=1)))[:, N_visual:, :]
         out = out.permute(0, 2, 1).reshape(B, -1, size_g, size_g)
-        out = torch.nn.functional.interpolate(out, (size_v, size_v), mode='bicubic')
+        out = torch.nn.functional.interpolate(out, (size_v, size_v), mode='bicubic')    #插值操作
         residual = out.reshape(B, -1, N_visual).permute(0, 2, 1)
 
         # add residual to visual feature 
@@ -429,7 +434,11 @@ class SpatialTransformer(nn.Module):
         x = self.proj_out(x)
         return x + x_in
 
-
+"""
+在指定分辨率层插入，融合空间注意力与条件信息。
+接收context(文本嵌入)和objs(物体位置编码)，通过交叉注意力机制对齐图文特征。
+支持多种融合类型(gatedSA, gatedCA),控制条件信息的影响力。
+"""
 class HOISpatialTransformer(nn.Module):
     def __init__(self, in_channels, key_dim, value_dim, n_heads, d_head, depth=1, fuser_type=None, use_checkpoint=True):
         super().__init__()

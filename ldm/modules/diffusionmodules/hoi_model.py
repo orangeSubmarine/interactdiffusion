@@ -30,7 +30,7 @@ class TimestepBlock(nn.Module):
         Apply the module to `x` given `emb` timestep embeddings.
         """
 
-
+#将时间步通过两层全连接层编码为高维向量，为网络提供噪声强度信息。
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     """
     A sequential module that passes timestep embeddings to the children that
@@ -107,7 +107,13 @@ class Downsample(nn.Module):
         assert x.shape[1] == self.channels
         return self.op(x)
 
-
+"""
+专为扩散模型设计的条件残差块，核心功能包括：
+特征变换：通过卷积层修改通道数/空间维度
+时间条件注入：将时间步嵌入(timestep embedding)融入特征
+梯度优化：支持梯度检查点节省显存
+多尺度支持：可选上/下采样操作残差块接收时间嵌入
+"""
 class ResBlock(TimestepBlock):
     """
     A residual block that can optionally change the number of channels.
@@ -138,6 +144,7 @@ class ResBlock(TimestepBlock):
             down=False,
     ):
         super().__init__()
+         # 参数存储
         self.channels = channels
         self.emb_channels = emb_channels
         self.dropout = dropout
@@ -146,12 +153,14 @@ class ResBlock(TimestepBlock):
         self.use_checkpoint = use_checkpoint
         self.use_scale_shift_norm = use_scale_shift_norm
 
+        # 输入处理层：归一化 -> SiLU激活 -> 卷积
         self.in_layers = nn.Sequential(
             normalization(channels),
             nn.SiLU(),
             conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
 
+        # 上下采样控制
         self.updown = up or down
 
         if up:
@@ -162,7 +171,7 @@ class ResBlock(TimestepBlock):
             self.x_upd = Downsample(channels, False, dims)
         else:
             self.h_upd = self.x_upd = nn.Identity()
-
+        # 时间步嵌入处理层
         self.emb_layers = nn.Sequential(
             nn.SiLU(),
             linear(
@@ -170,6 +179,7 @@ class ResBlock(TimestepBlock):
                 2 * self.out_channels if use_scale_shift_norm else self.out_channels,
             ),
         )
+        # 输出处理层：归一化 -> SiLU -> Dropout -> 零初始化卷积
         self.out_layers = nn.Sequential(
             normalization(self.out_channels),
             nn.SiLU(),
@@ -179,15 +189,17 @@ class ResBlock(TimestepBlock):
             ),
         )
 
+        # Skip Connection
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
-        elif use_conv:
+        elif use_conv: # 使用3x3卷积调整通道
             self.skip_connection = conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
             )
-        else:
+        else: # 使用1x1卷积调整通道
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
+    #入口方法，智能选择是否启用梯度检查点技术
     def forward(self, x, emb):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
@@ -203,6 +215,7 @@ class ResBlock(TimestepBlock):
         else:
             return self._forward(x, emb)
 
+    #指定数据如何通过预定义的层、激活函数等组件，形成计算图。
     def _forward(self, x, emb):
         if self.updown:
             in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
@@ -265,7 +278,7 @@ class HOIUNetModel(nn.Module):
         self.context_dim = context_dim
         self.fuser_type = fuser_type
         self.inpaint_mode = inpaint_mode
-        assert fuser_type in ["gatedSA", "gatedSA2", "gatedCA"]
+        assert fuser_type in ["gatedSA", "gatedSA2", "gatedCA"] # 特征融合方式三种注意力机制
 
         self.grounding_tokenizer_input = None  # set externally
 
@@ -280,17 +293,17 @@ class HOIUNetModel(nn.Module):
         self.additional_channel_from_downsampler = 0
         self.first_conv_type = "SD"
         self.first_conv_restorable = True
-        if grounding_downsampler is not None:
+        if grounding_downsampler is not None: # 物体定位下采样器
             self.downsample_net = instantiate_from_config(grounding_downsampler)
             self.additional_channel_from_downsampler = self.downsample_net.out_dim
             self.first_conv_type = "GLIGEN"
 
         if inpaint_mode:
             # The new added channels are: masked image (encoded image) and mask, which is 4+1
-            in_c = in_channels + self.additional_channel_from_downsampler + in_channels + 1
+            in_c = in_channels + self.additional_channel_from_downsampler + in_channels + 1 # 原图+掩码图+掩码通道
             self.first_conv_restorable = False  # in inpaint; You must use extra channels to take in masked real image
         else:
-            in_c = in_channels + self.additional_channel_from_downsampler
+            in_c = in_channels + self.additional_channel_from_downsampler # 常规输入通道
         self.input_blocks = nn.ModuleList([TimestepEmbedSequential(conv_nd(dims, in_c, model_channels, 3, padding=1))])
 
         input_block_chans = [model_channels]
@@ -298,6 +311,9 @@ class HOIUNetModel(nn.Module):
         ds = 1
 
         # = = = = = = = = = = = = = = = = = = = = Down Branch = = = = = = = = = = = = = = = = = = = = #
+        """
+        通过步长卷积或平均池化逐步压缩空间维度, 每级包含多个ResBlock和HOISpatialTransformer
+        """
         for level, mult in enumerate(channel_mult):
             for _ in range(num_res_blocks):
                 layers = [ResBlock(ch,
@@ -309,7 +325,7 @@ class HOIUNetModel(nn.Module):
                                    use_scale_shift_norm=use_scale_shift_norm, )]
 
                 ch = mult * model_channels
-                if ds in attention_resolutions:
+                if ds in attention_resolutions:# 在指定分辨率层级插入空间Transformer
                     dim_head = ch // num_heads
                     layers.append(HOISpatialTransformer(ch, key_dim=context_dim, value_dim=context_dim, n_heads=num_heads,
                                                         d_head=dim_head, depth=transformer_depth, fuser_type=fuser_type,
@@ -330,7 +346,9 @@ class HOIUNetModel(nn.Module):
         # self.input_blocks = [ C |  RT  RT  D  |  RT  RT  D  |  RT  RT  D  |   R  R   ]
 
         # = = = = = = = = = = = = = = = = = = = = BottleNeck = = = = = = = = = = = = = = = = = = = = #
-
+        """
+        深层特征提取，包含残差块和空间变换层
+        """
         self.middle_block = TimestepEmbedSequential(
             ResBlock(ch,
                      time_embed_dim,
@@ -348,7 +366,9 @@ class HOIUNetModel(nn.Module):
                      use_scale_shift_norm=use_scale_shift_norm))
 
         # = = = = = = = = = = = = = = = = = = = = Up Branch = = = = = = = = = = = = = = = = = = = = #
-
+        """
+        上采样块与跳跃连接拼接，逐步恢复分辨率，每个块融合对应层级的浅层特征
+        """
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(channel_mult))[::-1]:
             for i in range(num_res_blocks + 1):
@@ -377,26 +397,28 @@ class HOIUNetModel(nn.Module):
         # self.output_blocks = [ R  R  RU | RT  RT  RTU |  RT  RT  RTU  |  RT  RT  RT  ]
 
         self.out = nn.Sequential(
-            normalization(ch),
+            normalization(ch),# 最终归一化
             nn.SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),# 零初始化输出卷积
         )
 
-        self.position_net = instantiate_from_config(grounding_tokenizer)
+        self.position_net = instantiate_from_config(grounding_tokenizer)  # Interaction Tokenizer
 
     def restore_first_conv_from_SD(self):
-        if self.first_conv_restorable:
+        if self.first_conv_restorable:# 条件检查：是否允许恢复SD结构
+            # 获取当前输入层的硬件信息
             device = self.input_blocks[0][0].weight.device
             dtype = self.input_blocks[0][0].weight.dtype
-
+             # 加载预训练的Stable Diffusion输入层权重
             SD_weights = th.load("SD_input_conv_weight_bias.pth")
+             # 备份当前GLIGEN结构的输入层参数
             self.GLIGEN_first_conv_state_dict = deepcopy(self.input_blocks[0][0].state_dict())
-
+            # 重建SD标准输入层 (4通道输入)
             self.input_blocks[0][0] = conv_nd(2, 4, 320, 3, padding=1)
             self.input_blocks[0][0].load_state_dict(SD_weights)
             self.input_blocks[0][0].to(device)
             self.input_blocks[0][0].type(dtype)
-
+            # 更新结构类型标记
             self.first_conv_type = "SD"
         else:
             print(
@@ -406,13 +428,13 @@ class HOIUNetModel(nn.Module):
         breakpoint()  # TODO
 
     def forward(self, input):
-
+        # 物体定位条件信息（可能为空）
         if ("grounding_input" in input):
             grounding_input = input["grounding_input"]
         else:
             # Guidance null case
             grounding_input = self.grounding_tokenizer_input.get_null_input()
-
+        # 10%概率随机丢弃条件信息（提升鲁棒性）
         if self.training and random.random() < 0.1 and self.grounding_tokenizer_input.set:  # random drop for guidance
             grounding_input = self.grounding_tokenizer_input.get_null_input()
 
@@ -421,24 +443,26 @@ class HOIUNetModel(nn.Module):
 
         # Time embedding
         t_emb = timestep_embedding(input["timesteps"], self.model_channels, repeat_only=False)
-        t_emb = t_emb.to(dtype=objs.dtype)  # change to 16bit if model is at 16
-        emb = self.time_embed(t_emb)
+        t_emb = t_emb.to(dtype=objs.dtype)  # 保持精度一致 change to 16bit if model is at 16
+        emb = self.time_embed(t_emb)# 时间编码网络
 
         # input tensor
         h = input["x"].to(dtype=objs.dtype)
+        # GLIGEN模式下的特征融合
         if self.downsample_net != None and self.first_conv_type == "GLIGEN":
             temp = self.downsample_net(input["grounding_extra_input"])
-            h = th.cat([h, temp], dim=1)
+            h = th.cat([h, temp], dim=1)# 拼接原始图像与定位特征
+        # inpaint模式处理
         if self.inpaint_mode:
             if self.downsample_net != None:
                 breakpoint()  # TODO: think about this case
-            h = th.cat([h, input["inpainting_extra_input"]], dim=1)
+            h = th.cat([h, input["inpainting_extra_input"]], dim=1) # 拼接掩码信息
 
         # Text input
         context = input["context"].to(dtype=objs.dtype)
 
-        # Start forwarding
-        hs = []
+        #  UNet主干的前向传播
+        hs = [] # 跳跃连接缓存
         for module in self.input_blocks:
             h = module(h, emb, context, objs)
             hs.append(h)

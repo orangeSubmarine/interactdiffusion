@@ -9,12 +9,13 @@ from ldm.modules.x_transformer import AbsolutePositionalEmbedding, FixedPosition
 
 class HOIPositionNetV5(nn.Module):
     """
-    Transform interaction information into interaction condition tokens
+    Transform interaction information into interaction condition tokens (Interaction Tokenizer)
     """
     def __init__(self, in_dim, out_dim, fourier_freqs=8, max_interactions=30):
         super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
+         # 输入输出特征维度，在model.params.grounding_tokenizer.params中定义
+        self.in_dim = in_dim # CLIP文本编码器倒数第二层的输出特征的维度：768
+        self.out_dim = out_dim # 每一个Gated layer后都有一个线性层来对齐维度，所以输出维度可以任意选取
 
         self.fourier_embedder = FourierEmbedder(num_freqs=fourier_freqs)
         self.interaction_embedding = AbsolutePositionalEmbedding(dim=out_dim, max_seq_len=max_interactions)
