@@ -62,7 +62,7 @@ class ImageCaptionSaver:
 
 def read_official_ckpt(ckpt_path):
     "Read offical pretrained SD ckpt and convert into my style"
-    state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
+    state_dict = torch.load(ckpt_path, map_location="cpu",weights_only=False)["state_dict"]
     out = {}
     out["model"] = {}
     out["text_encoder"] = {}

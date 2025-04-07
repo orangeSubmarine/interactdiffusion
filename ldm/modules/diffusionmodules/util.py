@@ -12,15 +12,15 @@ from ldm.util import instantiate_from_config
 class FourierEmbedder():
     def __init__(self, num_freqs=64, temperature=100):
 
-        self.num_freqs = num_freqs
-        self.temperature = temperature
-        self.freq_bands = temperature ** ( torch.arange(num_freqs) / num_freqs )  
+        self.num_freqs = num_freqs #频率数量：控制编码的细节层级
+        self.temperature = temperature # 温度参数：控制频率范围的指数增长速率
+        self.freq_bands = temperature ** ( torch.arange(num_freqs) / num_freqs )  # 生成频率带：指数递增的几何序列
 
     @ torch.no_grad()
     def __call__(self, x, cat_dim=-1):
         "x: arbitrary shape of tensor. dim: cat dim"
         out = []
-        for freq in self.freq_bands:
+        for freq in self.freq_bands: # 对每个频率带生成正弦和余弦分量
             out.append( torch.sin( freq*x ) )
             out.append( torch.cos( freq*x ) )
         return torch.cat(out, cat_dim)

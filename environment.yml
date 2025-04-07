@@ -5,10 +5,6 @@ channels:
   - defaults
 dependencies:
   - python>=3.11
-  - pytorch
-  - torchvision
-  - torchaudio
-  - pytorch-cuda=11.7
   - pip:
       - albumentations
       - opencv-python
@@ -23,9 +19,12 @@ dependencies:
       - git+https://github.com/openai/CLIP.git
       - protobuf
       - torchmetrics
-      - transformers<4.31.0
+      - torch==2.4.0+cu118 
+      - torchaudio==2.4.0+cu118 
+      - torchvision==0.19.0+cu118
+      - transformers
       - kornia
-      - xformers
+      - xformers==v0.0.28.post1
       - gradio==3.36.1  # new gradio fail in load bounding box from examples
       - gradio-client==0.2.9
 

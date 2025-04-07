@@ -23,7 +23,7 @@ clip_text_feature_dict = dict()
 
 
 def load_clip_text_cache(device):
-    clip_text_feature_dict = torch.load('/home/lxc/papers/Interactdiffusion/interactdiffusion/DATA/clip_phrases_feature_cache.pth', map_location=device)
+    clip_text_feature_dict = torch.load('/media/store/lxc/papers/Interactdiffusion/interactdiffusion/DATA/clip_phrases_feature_cache.pth', map_location=device)
     return clip_text_feature_dict
 
 

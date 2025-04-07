@@ -14,8 +14,8 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--DATA_ROOT", type=str,  default="/home/lxc/datasets", help="path to DATA")
-    parser.add_argument("--MODEL_ROOT", type=str,  default="/home/lxc/models", help="path to MODEL")
+    parser.add_argument("--DATA_ROOT", type=str,  default="/media/store/lxc/datasets", help="path to DATA")
+    parser.add_argument("--MODEL_ROOT", type=str,  default="/media/store/lxc/models", help="path to MODEL")
     parser.add_argument("--OUTPUT_ROOT", type=str,  default="OUTPUT", help="path to OUTPUT")
 
     parser.add_argument("--name", type=str,  default="test", help="experiment will be stored in OUTPUT_ROOT/name")
