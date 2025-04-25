@@ -1,16 +1,18 @@
 from .catalog import DatasetCatalog
 from ldm.util import instantiate_from_config
 import torch
-
-
+"""
+拼接多个数据集的类构造函数
+"""
 class ConCatDataset():
     def __init__(self, dataset_name_list, ROOT, train=True, repeats=None):
         self.datasets = []
         cul_previous_dataset_length = 0
-        offset_map = []
-        which_dataset = []
+        offset_map = []  # 索引偏移量映射
+        which_dataset = []  # 样本来源数据集标记
 
-        if repeats is None:
+        #重复次数处理
+        if repeats is None: 
             repeats = [1] * len(dataset_name_list)
         else:
             assert len(repeats) == len(dataset_name_list)

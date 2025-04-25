@@ -95,3 +95,4 @@ test2015
 test2015/
 .ckpt
 *.ckpt
+generation_samples

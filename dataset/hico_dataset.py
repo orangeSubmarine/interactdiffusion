@@ -13,9 +13,11 @@ from .utils import project
 
 class HOIBaseDataset(BaseDataset):
     def __init__(self, random_crop, random_flip, image_size):
-        super().__init__(random_crop, random_flip, image_size)
+        super().__init__(random_crop, random_flip, image_size)#是否启用随机裁剪，是否启用随机水平翻转，图像处理后尺寸
 
-    def draw_box(self, img, boxes):
+    def draw_box(self, img, boxes):#绘制bounding box
+        if len(boxes) == 0:
+            return img
         colors = ["red", "olive", "blue", "green", "orange", "brown", "cyan", "purple"]
         draw = ImageDraw.Draw(img)
         for bid, box in enumerate(boxes):
@@ -103,21 +105,22 @@ class HICODataset(HOIBaseDataset):
         zeroshot_files_list = json.load(open(zeroshot_files,"r"))
         self.files = [f for f in self.files if not os.path.basename(f) in zeroshot_files_list]
 
+    # 建立图像与文本特征的统一表征空间:
     def mapping(self, image_embedding):
-        if self.which_layer_image == 'after':
+        if self.which_layer_image == 'after':#直接使用CLIP输出的图像特征,保持原始跨模态对齐空间,特征已进行L2归一化（norm=1）
             # use CLIP image feaure, the aligned feature space with norm=1.
             return image_embedding
-        elif self.which_layer_image == 'after_renorm':
+        elif self.which_layer_image == 'after_renorm':#在原始特征基础上进行尺度缩放,28.7是文本倒数第二层特征的典型范数值,使图像特征与文本特征具有可比尺度
             # same as before but normalize it to 28.7, which is empirically same as text penultimate feature norm.
             return image_embedding * 28.7
-        elif self.which_layer_image == 'after_reproject':
+        elif self.which_layer_image == 'after_reproject':#使用文本投影矩阵（CLIP最后一层线性权重）
             # Re-project the CLIP image feature into text penultimate space using text linear matrix and norm it into 28.7
-            image_embedding = project(image_embedding.unsqueeze(0), self.projection_matrix.T)
-            image_embedding = image_embedding.squeeze(0)
-            image_embedding = image_embedding / image_embedding.norm()
+            image_embedding = project(image_embedding.unsqueeze(0), self.projection_matrix.T) #添加批次维度 (unsqueeze(0))；矩阵投影转换特征空间
+            image_embedding = image_embedding.squeeze(0) #移除批次维度 (squeeze(0))
+            image_embedding = image_embedding / image_embedding.norm() #L2归一化
             image_embedding = image_embedding * 28.7
             return image_embedding
-
+        
     def __getitem__(self, index):
         if self.max_boxes_per_data > 99:
             assert False, "Are you sure setting such large number of boxes per image?"
@@ -142,6 +145,7 @@ class HICODataset(HOIBaseDataset):
         all_subject_text_embeddings = []
         all_object_text_embeddings = []
         all_action_text_embeddings = []
+        # image_embeddings没有使用到
         all_subject_image_embeddings = []
         all_object_image_embeddings = []
         all_action_image_embeddings = []

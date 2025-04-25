@@ -391,7 +391,7 @@ class Trainer:
         return z, t, context, inpainting_extra_input, grounding_extra_input
 
     def run_one_step(self, batch):
-        x_start, t, context, inpainting_extra_input, grounding_extra_input = self.get_input(batch)
+        x_start, t, context, inpainting_extra_input, grounding_extra_input = self.get_input(batch)    # x_start: 原始图像的潜在编码，t 随机采样的时间步，context: 文本编码
         noise = torch.randn_like(x_start)
         x_noisy = self.diffusion.q_sample(x_start=x_start, t=t, noise=noise)
 
@@ -402,8 +402,9 @@ class Trainer:
                      inpainting_extra_input=inpainting_extra_input,
                      grounding_extra_input=grounding_extra_input,
                      grounding_input=grounding_input)
+        # 将输入传入模型，预测噪声
         model_output = self.model(input)
-
+         # 计算预测噪声和真实噪声的MSE损失
         loss = torch.nn.functional.mse_loss(model_output, noise) * self.l_simple_weight
 
         self.loss_dict = {"loss": loss.item()}
